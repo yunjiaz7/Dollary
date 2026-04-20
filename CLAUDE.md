@@ -37,7 +37,7 @@ npm run build
 
 ## Architecture
 
-### Backend Structure (planned: `backend/src/main/java/com/...`)
+### Backend Structure (planned: `backend/src/main/java/com/billingbook/...`)
 - `/controller` — REST endpoints
 - `/service` — Business logic (auto-categorization, CSV parsing, de-duplication)
 - `/repository` — Spring Data JPA repositories
@@ -52,9 +52,12 @@ npm run build
 
 ### Key Design Decisions
 - **Single-user auth:** Credentials stored in environment variables, not a user table. Session via HttpOnly cookie (7-day expiry).
-- **CSV import:** BOA format only. De-duplication via `source_hash` (SHA-256 of Reference Number).
+- **CSV import:** BOA format only. De-duplication via `source_hash` (raw Reference Number, no hashing).
 - **Auto-categorization:** Keyword matching on `merchant_name` (Payee field) at import time. Only re-runs if user hasn't manually set the category.
 - **Delete restriction:** Only manually-added transactions can be deleted; CSV-imported ones cannot.
+- **Manual transactions:** User explicitly toggles income/expense via `is_income` field; amount is always positive.
+- **Error format:** All API errors return `{"error": "message"}`.
+- **No pagination:** Monthly queries return all results without pagination.
 - **Data model core fields:** `Transaction(id, amount, date, merchant_name, category_id, note, is_income, is_manual, category_modified_by_user, source_hash)` + `Category(id, name, is_system)`
 
 ### API Surface (all require session auth except `/api/auth/**` and `/api/health`)
@@ -62,6 +65,7 @@ npm run build
 |---|---|---|
 | `/api/auth/login` | POST | Login |
 | `/api/auth/logout` | POST | Logout |
+| `/api/auth/me` | GET | Check login status (200=logged in, 401=not) |
 | `/api/transactions` | GET | List (supports `?year=&month=` filter) |
 | `/api/transactions` | POST | Add manual transaction |
 | `/api/transactions/{id}` | PUT | Edit transaction |

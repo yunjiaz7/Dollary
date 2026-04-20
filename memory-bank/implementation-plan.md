@@ -1,5 +1,11 @@
 # implementation-plan.md — Personal Finance Tracker
 
+> **通用约定**
+> - Java 包名：`com.billingbook`
+> - API 错误统一返回：`{"error": "message"}`
+> - 不做分页，按月全量返回
+> - Session 使用 in-memory 存储（重启需重新登录）
+
 ---
 
 ## Phase 1: 项目初始化
@@ -7,9 +13,9 @@
 ### Step 1: 初始化后端项目
 **Goal:** 创建可运行的 Spring Boot 项目骨架
 **Instructions:**
-- 用 Spring Initializr 创建项目，选择依赖：Spring Web、Spring Data JPA、
+- 用 Spring Initializr 创建项目（包名 `com.billingbook`），选择依赖：Spring Web、Spring Data JPA、
   Spring Security、PostgreSQL Driver、Lombok
-- 确认项目结构：controller / service / repository / model 四个包
+- 确认项目结构：controller / service / repository / model / config 五个包
 - 配置 application.properties，连接本地 PostgreSQL（通过 Docker Compose）
 - 写一个 GET /api/health 端点，返回字符串 "ok"
 **Validation:** 启动项目后访问 localhost:8080/api/health，浏览器返回 "ok"
@@ -46,14 +52,18 @@
 - 在环境变量里配置 APP_USERNAME 和 APP_PASSWORD
 - 配置 Spring Security，关闭默认登录页，改为自定义 REST 接口
 - 实现 POST /api/auth/login：接收 username + password，
-  验证通过后创建 Session，返回 200；失败返回 401
+  验证通过后创建 Session，返回 200；失败返回 401 + `{"error": "用户名或密码错误"}`
 - 实现 POST /api/auth/logout：清除 Session，返回 200
-- Session Cookie 设置为 HttpOnly
+- 实现 GET /api/auth/me：已登录返回 200，未登录返回 401（用于前端检测登录状态）
+- Session Cookie 设置为 HttpOnly，有效期 7 天
+- Session 使用 in-memory 存储（重启需重新登录）
 - 配置 Spring Boot CORS，允许 http://localhost:5173 访问所有
   /api/** 接口；生产环境 Vercel 域名在 Step 20 部署时补充
 - 除 /api/auth/** 和 /api/health 外，所有接口需要登录才能访问
+- 所有错误响应统一格式：`{"error": "message"}`
 **Validation:** 用 Postman 测试：正确密码返回 200 且 Set-Cookie 存在；
-错误密码返回 401；登出后再访问受保护接口返回 401
+错误密码返回 401；登出后再访问受保护接口返回 401；
+GET /api/auth/me 登录状态返回 200，未登录返回 401
 
 ---
 
@@ -64,6 +74,7 @@
 - 调用 POST /api/auth/login，成功后跳转到主页
 - 失败显示错误提示"用户名或密码错误"
 - 用 React Router 实现路由：/ 是主页，/login 是登录页
+- 页面加载时调用 GET /api/auth/me 检测登录状态：200 则留在当前页，401 则跳转 /login
 - 未登录访问主页时自动跳转 /login
 - Tailwind CSS 样式，Mobile First 布局
 **Validation:** 输入正确密码跳转主页；错误密码显示错误提示；
@@ -120,16 +131,29 @@ POST 新增一条后 GET 返回 10 条；重复名称返回 400
 **Instructions:**
 - 实现 POST /api/transactions/import，接收 multipart/form-data 文件
 - 用 Apache Commons CSV 解析 BOA CSV 格式
-- BOA CSV 字段映射：
+- BOA CSV 列名：Posted Date, Reference Number, Payee, Address, Amount
+- 字段映射：
   - Posted Date → date
   - Amount → amount
   - Payee → merchant_name
-  - Reference Number → source_hash
+  - Reference Number → source_hash（存原始值，不做哈希）
 - Posted Date 为空的 pending 交易直接跳过不导入
 - 金额处理：负数为支出，正数为收入，存入时统一转为正数，
   用 is_income 字段区分
-- 自动分类：根据 Payee 关键词匹配预设分类，
+- 自动分类：根据 Payee 关键词匹配预设分类（大小写不敏感），
   无匹配归为"其他"，category_modified_by_user=false
+- 关键词映射表：
+  | 分类 | 关键词 |
+  |------|------|
+  | 交通 | UBER, LYFT, CLIPPER, BART |
+  | 餐饮 | STARBUCKS, SAFEWAY, WHOLEFDS, TRADER JOE, TACO BELL, CHIPOTLE, MCDONALD |
+  | 购物 | AMAZON, AMAZON MKTPL, WALMART, TARGET |
+  | 娱乐 | NETFLIX, SPOTIFY, OPENAI, CLAUDE, APPLE, GOOGLE |
+  | 医疗 | HEADWAY, TALKIATRY |
+  | 旅行 | DELTA, AMERICAN AIR, UNITED, SOUTHWEST |
+  | 账单/水电 | PG&E, COMCAST, ATT, VERIZON |
+  | 收入 | PAYROLL, DIRECT DEP, ZELLE, VENMO, TRANSFER FROM |
+  | 其他 | 无法匹配时归入 |
 - 去重：Reference Number 已存在于 source_hash 则跳过
 - 返回：成功导入 N 条，跳过重复 N 条，跳过 pending N 条
 **Validation:** 上传真实 BOA CSV，返回导入数量；
@@ -168,13 +192,13 @@ POST 新增一条后 GET 返回 10 条；重复名称返回 400
 ### Step 12: 手动添加 / 编辑 / 删除交易 API
 **Goal:** 实现交易记录的增删改接口
 **Instructions:**
-- 实现 POST /api/transactions：手动添加，字段：amount、date、
-  category_id、note，is_manual=true，is_income 根据金额正负判断
-- 实现 PUT /api/transactions/{id}：可编辑 amount、category_id、note；
+- 实现 POST /api/transactions：手动添加，字段：amount（始终为正数）、date、
+  category_id、note、is_income（布尔值，前端 toggle 传入），is_manual=true
+- 实现 PUT /api/transactions/{id}：可编辑 amount、category_id、note、is_income；
   编辑 category_id 时将 category_modified_by_user 设为 true
 - 实现 DELETE /api/transactions/{id}：只允许删除 is_manual=true 的记录，
-  尝试删除 CSV 导入记录返回 403
-- 金额不能为 0 或负数，否则返回 400
+  尝试删除 CSV 导入记录返回 403 + `{"error": "CSV导入的记录不可删除"}`
+- 金额不能为 0 或负数，否则返回 400 + `{"error": "金额必须为正数"}`
 **Validation:** Postman 测试手动添加后出现在列表；
 编辑后字段更新；删除手动添加的成功；删除 CSV 导入的返回 403
 
@@ -197,12 +221,12 @@ POST 新增一条后 GET 返回 10 条；重复名称返回 400
 ### Step 14: 前端编辑 / 添加 / 删除交互
 **Goal:** 实现交易记录的增删改 UI
 **Instructions:**
-- 点击列表中任意一条记录，弹出编辑面板（或跳转编辑页）
-- 编辑面板显示当前值，可修改：金额、分类（下拉选择）、备注
+- 点击列表中任意一条记录，弹出 Modal 编辑弹窗
+- 编辑 Modal 显示当前值，可修改：金额、分类（下拉选择）、备注、收入/支出 toggle
 - 保存后列表实时更新
 - 手动添加的记录显示删除按钮，点击后确认删除
-- 页面有"+ 添加记录"按钮，点击弹出添加表单
-- 添加表单字段：金额、日期、分类（下拉）、备注
+- 页面有"+ 添加记录"按钮，点击弹出添加 Modal
+- 添加 Modal 字段：金额（正数）、日期、分类（下拉）、备注、收入/支出 toggle
 **Validation:** 编辑分类后列表显示新分类；
 删除手动记录后消失；添加新记录后出现在列表
 

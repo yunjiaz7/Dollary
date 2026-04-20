@@ -83,7 +83,8 @@
 - 编辑后统计和图表实时更新
 
 ### 3.6 手动添加交易
-- 字段：金额、日期、分类、备注
+- 字段：金额（始终为正数）、日期、分类、备注、收入/支出切换（is_income toggle）
+- 用户通过 toggle 自行选择"收入"或"支出"，金额始终输入正数
 - 手动添加的记录有视觉标识
 - 手动添加的可以删除，CSV 导入的不可删除
 
@@ -136,7 +137,7 @@
 | is_income | Boolean | 是否为收入 |
 | is_manual | Boolean | 是否手动添加 |
 | category_modified_by_user | Boolean | 用户是否手动改过分类，true 则导入时不覆盖 |
-| source_hash | String | 去重用，存储 BOA CSV 的 Reference Number；手动添加为 null |
+| source_hash | String | 去重用，存储 BOA CSV 的原始 Reference Number（非哈希）；手动添加为 null |
 | created_at | Timestamp | 创建时间 |
 | updated_at | Timestamp | 最后更新时间 |
 
@@ -152,6 +153,7 @@
 |------|------|------|
 | /api/auth/login | POST | 登录 |
 | /api/auth/logout | POST | 登出，清除 Session Cookie |
+| /api/auth/me | GET | 检测登录状态，已登录返回 200，未登录返回 401 |
 | /api/transactions | GET | 查询交易列表（支持月份过滤） |
 | /api/transactions | POST | 手动添加交易 |
 | /api/transactions/{id} | PUT | 编辑交易 |
@@ -160,6 +162,30 @@
 | /api/summary | GET | 收支总览（按月） |
 | /api/categories | GET | 获取分类列表 |
 | /api/categories | POST | 新增自定义分类 |
+
+### CSV 格式
+- BOA CSV 列名：Posted Date, Reference Number, Payee, Address, Amount
+- 字段映射：
+  - Posted Date → date
+  - Amount → amount（负数为支出，正数为收入，存入时统一转正数）
+  - Payee → merchant_name
+  - Reference Number → source_hash（存原始值，不做哈希）
+
+### 自动分类关键词映射
+| 分类 | 关键词（Payee 中包含则匹配） |
+|------|------|
+| 交通 | UBER, LYFT, CLIPPER, BART |
+| 餐饮 | STARBUCKS, SAFEWAY, WHOLEFDS, TRADER JOE, TACO BELL, CHIPOTLE, MCDONALD |
+| 购物 | AMAZON, AMAZON MKTPL, WALMART, TARGET |
+| 娱乐 | NETFLIX, SPOTIFY, OPENAI, CLAUDE, APPLE, GOOGLE |
+| 医疗 | HEADWAY, TALKIATRY |
+| 旅行 | DELTA, AMERICAN AIR, UNITED, SOUTHWEST |
+| 账单/水电 | PG&E, COMCAST, ATT, VERIZON |
+| 收入 | PAYROLL, DIRECT DEP, ZELLE, VENMO, TRANSFER FROM |
+| 其他 | 无法匹配时归入 |
+
+### 错误响应格式
+- 所有 API 错误统一返回：`{"error": "message"}`
 
 ---
 
