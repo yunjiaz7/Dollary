@@ -1,4 +1,4 @@
-# progress.md — Personal Finance Tracker
+# progress.md — Dollary
 
 ## Phase 1: 项目初始化
 
@@ -19,21 +19,21 @@
 
 | Step | Description | Status |
 |------|-------------|--------|
-| Step 6 | 创建数据库表 | Not started |
-| Step 7 | 预设分类数据 | Not started |
+| Step 6 | 创建数据库表 | Done |
+| Step 7 | 预设分类数据 | Done |
 
 ## Phase 4: 分类接口
 
 | Step | Description | Status |
 |------|-------------|--------|
-| Step 8 | 分类 API | Not started |
+| Step 8 | 分类 API | Done |
 
 ## Phase 5: CSV 导入
 
 | Step | Description | Status |
 |------|-------------|--------|
-| Step 9 | 后端 CSV 解析与导入 | Not started |
-| Step 10 | 前端 CSV 上传页面 | Not started |
+| Step 9 | 后端 CSV 解析与导入 (CsvImportService + TransactionController + Apache Commons CSV) | Done |
+| Step 10 | 前端 CSV 上传页面 (HomePage import button, file picker, loading/results/error states) | Done |
 
 ## Phase 6: 交易记录
 

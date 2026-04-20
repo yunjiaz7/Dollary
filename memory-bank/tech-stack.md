@@ -1,4 +1,4 @@
-# tech-stack.md — Personal Finance Tracker
+# tech-stack.md — Dollary
 
 ## 前端
 - **框架**：React 18

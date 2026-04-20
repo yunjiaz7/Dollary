@@ -1,4 +1,4 @@
-# design-document.md — Personal Finance Tracker
+# design-document.md — Dollary
 
 ## 1. Product Scope
 

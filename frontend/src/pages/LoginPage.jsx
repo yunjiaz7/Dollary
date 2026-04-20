@@ -33,7 +33,7 @@ export default function LoginPage({ onLogin }) {
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold tracking-tight"
               style={{ color: '#2C2C2C', fontFamily: 'Georgia, "Times New Roman", serif' }}>
-            Personal Finance Tracker
+            Dollary
           </h1>
           <p className="mt-2 text-sm" style={{ color: '#8B8680' }}>
             Sign in to manage your finances

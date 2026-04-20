@@ -1,4 +1,4 @@
-# implementation-plan.md — Personal Finance Tracker
+# implementation-plan.md — Dollary
 
 > **通用约定**
 > - Java 包名：`com.billingbook`
@@ -38,7 +38,7 @@
 - 用 Vite 创建 React 项目
 - 安装 Tailwind CSS 并完成配置
 - 安装 Axios、Recharts
-- 写一个最简单的首页，显示文字 "Personal Finance Tracker"
+- 写一个最简单的首页，显示文字 "Dollary"
 - 配置 Axios baseURL 指向 localhost:8080
 **Validation:** 启动前端后浏览器显示首页文字，无控制台报错
 

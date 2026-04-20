@@ -95,3 +95,21 @@ npm run build
 - Motion: subtle only — light hover effects, no flashy animations
 - Avoid: purple gradients, cold blues, Inter/Roboto fonts, glassmorphism, pure white backgrounds, generic AI aesthetics
 - This is a personal finance app — the design should feel trustworthy, calm, and approachable
+
+## Workflow Rules
+
+- At the start of every new task, you must fully read ALL files in memory-bank/:
+  - design-document.md
+  - tech-stack.md
+  - implementation-plan.md
+  - progress.md
+  - architecture.md
+- Execute all steps within a phase before stopping
+- Do not start the next phase until the user explicitly confirms the current phase is validated
+- After the user confirms validation:
+  - Update memory-bank/progress.md with what was done
+  - Update memory-bank/architecture.md to reflect any new or changed files
+  - Append validation steps for the phase to VALIDATION.md (do not overwrite existing content)
+  - Then wait for the user's next instruction — do not proceed automatically
+- If you hit any blocker during execution, stop immediately and ask the user
+- After completing a major feature or milestone, remind the user to make a git commit
