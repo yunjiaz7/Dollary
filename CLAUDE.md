@@ -81,3 +81,17 @@ npm run build
 - Before writing any code, you must fully read memory-bank/@architecture.md
 - Before writing any code, you must fully read memory-bank/@design-document.md
 - After completing any major feature or milestone, you must update memory-bank/@architecture.md
+
+## Frontend Development Rules
+
+- Before writing any frontend code, you must load and apply the /frontend-design skill and /minimalist-ui skill
+- Design direction: warm editorial minimalism — inspired by high-quality print magazines
+- Background: cream/off-white (#F5F0E8 or similar warm white), never pure white or dark
+- Text: deep charcoal (not pure black), clear typographic hierarchy
+- Cards: thin borders, no heavy shadows, clean and structured
+- Typography: pair a serif or semi-serif display font for headings with a clean sans-serif for body text
+- Accent colors: muted blue and warm orange as highlights only, used sparingly
+- Spacing: generous, airy — never cramped or dense
+- Motion: subtle only — light hover effects, no flashy animations
+- Avoid: purple gradients, cold blues, Inter/Roboto fonts, glassmorphism, pure white backgrounds, generic AI aesthetics
+- This is a personal finance app — the design should feel trustworthy, calm, and approachable
