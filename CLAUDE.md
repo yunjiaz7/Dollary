@@ -82,19 +82,19 @@ npm run build
 - Before writing any code, you must fully read memory-bank/@design-document.md
 - After completing any major feature or milestone, you must update memory-bank/@architecture.md
 
-## Frontend Development Rules
+## Frontend Style Rules
 
-- Before writing any frontend code, you must load and apply the /frontend-design skill and /minimalist-ui skill
-- Design direction: warm editorial minimalism — inspired by high-quality print magazines
-- Background: cream/off-white (#F5F0E8 or similar warm white), never pure white or dark
-- Text: deep charcoal (not pure black), clear typographic hierarchy
-- Cards: thin borders, no heavy shadows, clean and structured
-- Typography: pair a serif or semi-serif display font for headings with a clean sans-serif for body text
-- Accent colors: muted blue and warm orange as highlights only, used sparingly
-- Spacing: generous, airy — never cramped or dense
-- Motion: subtle only — light hover effects, no flashy animations
-- Avoid: purple gradients, cold blues, Inter/Roboto fonts, glassmorphism, pure white backgrounds, generic AI aesthetics
-- This is a personal finance app — the design should feel trustworthy, calm, and approachable
+This project uses the frontend-design skill for all UI work.
+
+Design direction: Brutalist / Tactile Tool UI
+
+- Background: Sandy warm gray #E8E4DC, never pure white
+- Cards and containers: thick dark border (2px solid #2C2C2C), rounded corners 8-12px
+- Buttons: 3D tactile feel — thick border + bottom shadow (3-4px) simulating physical depth; hover compresses shadow to simulate press
+- Typography: monospace font (JetBrains Mono or IBM Plex Mono) for headings and labels
+- Accent colors: blue #4A90D9 and orange #E8651A for tags, highlights, active states
+- No gradients, no glassmorphism, no soft shadows
+- Overall feel: precision tool interface, not a consumer app
 
 ## Workflow Rules
 
@@ -105,11 +105,11 @@ npm run build
   - progress.md
   - architecture.md
 - Execute all steps within a phase before stopping
-- Do not start the next phase until the user explicitly confirms the current phase is validated
-- After the user confirms validation:
+- After completing all steps in a phase, immediately and automatically:
   - Update memory-bank/progress.md with what was done
   - Update memory-bank/architecture.md to reflect any new or changed files
   - Append validation steps for the phase to VALIDATION.md (do not overwrite existing content)
-  - Then wait for the user's next instruction — do not proceed automatically
+- Then notify the user that the phase is complete and ask them to validate using VALIDATION.md
+- Do not start the next phase until the user explicitly confirms the current phase is validated
 - If you hit any blocker during execution, stop immediately and ask the user
 - After completing a major feature or milestone, remind the user to make a git commit

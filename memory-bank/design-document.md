@@ -99,6 +99,15 @@
 - 收入不参与分类图表，只在总览显示
 - 切换月份后图表联动更新
 
+### 3.9 UI Style: Brutalist / Tactile Tool UI
+
+- Background: #E8E4DC sandy warm gray
+- All cards and containers: 2px solid #2C2C2C border, 8-12px rounded corners
+- Buttons: physical 3D appearance with bottom shadow, pressable feel
+- Typography: JetBrains Mono / IBM Plex Mono for headings and labels
+- Accent: blue #4A90D9 and orange #E8651A
+- Reference aesthetic: Claude Code's own interface style
+
 ---
 
 ## 4. Edge Cases

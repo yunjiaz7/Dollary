@@ -11,20 +11,25 @@
 com.billingbook
 ├── config/
 │   ├── SecurityConfig.java        — Spring Security: CORS, CSRF disabled, session-based auth, permit /api/health + /api/auth/**
-│   └── DataInitializer.java       — Seeds 9 system categories on first startup (ApplicationRunner)
+│   ├── DataInitializer.java       — Seeds 9 system categories on first startup (ApplicationRunner)
+│   └── GlobalExceptionHandler.java — @ControllerAdvice: converts ResponseStatusException to {"error": "message"}
 ├── controller/
 │   ├── HealthController.java      — GET /api/health returns "ok"
 │   ├── AuthController.java        — POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
 │   ├── CategoryController.java    — GET /api/categories, POST /api/categories
-│   └── TransactionController.java — POST /api/transactions/import (multipart CSV upload)
+│   └── TransactionController.java — GET/POST/PUT/DELETE /api/transactions + POST /api/transactions/import
+│   ├── TransactionResponse.java     — Record: id, amount, date, merchantName, categoryName, categoryId, note, isIncome, isManual
+│   ├── TransactionCreateRequest.java — Record: amount, date, categoryId, note, isIncome
+│   └── TransactionUpdateRequest.java — Record: amount, categoryId, note, isIncome (all nullable)
 ├── model/
 │   ├── Category.java              — JPA entity: id (UUID), name, is_system; table: categories
 │   └── Transaction.java           — JPA entity: id, amount, date, merchant_name, category (FK), note, is_income, is_manual, category_modified_by_user, source_hash (unique), created_at, updated_at; table: transactions
 ├── repository/
 │   ├── CategoryRepository.java    — Spring Data JPA; existsBySystemTrue(), existsByName()
-│   └── TransactionRepository.java — Spring Data JPA; existsBySourceHash()
+│   └── TransactionRepository.java — Spring Data JPA; existsBySourceHash(), findByDateBetweenOrderByDateDesc()
 └── service/
-    └── CsvImportService.java      — Parses BOA CSV, auto-categorizes by keyword, de-duplicates by source_hash, skips pending
+    ├── CsvImportService.java      — Parses BOA CSV, auto-categorizes by keyword, de-duplicates by source_hash, skips pending
+    └── TransactionService.java   — CRUD for transactions: list by month, create (manual), update (sets categoryModifiedByUser), delete (manual only)
 ```
 
 ### Authentication
@@ -72,11 +77,15 @@ src/
 │   └── api.js                     — Axios instance (baseURL + withCredentials)
 ├── pages/
 │   ├── LoginPage.jsx              — Login form with warm editorial styling
-│   └── HomePage.jsx               — Main page with header, sign out, CSV import button, empty state
-├── components/                    — (empty, Step 10+)
-├── hooks/                         — (empty, Step 13+)
+│   └── HomePage.jsx               — Main page: header, transaction list, add/import buttons, CSV import, modals
+├── components/
+│   ├── TransactionList.jsx        — Month selector + scrollable transaction cards (Brutalist style)
+│   └── TransactionModal.jsx       — Add/edit modal: amount, category dropdown, note, income/expense toggle, delete
+├── hooks/
+│   ├── useTransactions.js         — Fetches transactions by month, month navigation, refresh
+│   └── useCategories.js           — Fetches category list
 ├── App.jsx                        — React Router: / → HomePage, /login → LoginPage, auth guard
-├── index.css                      — Tailwind CSS import
+├── index.css                      — Tailwind CSS + IBM Plex Mono font import
 └── main.jsx                       — Entry point
 ```
 
@@ -86,15 +95,19 @@ src/
 - **Auth check:** On mount, calls `GET /api/auth/me` to determine auth state
 - **Logout:** Calls `POST /api/auth/logout`, clears state, redirects to `/login`
 
-### Design System
-- **Background:** Cream/off-white `#F5F0E8`
+### Design System (Brutalist / Tactile Tool UI)
+- **Background:** Sandy warm gray `#E8E4DC`
 - **Text:** Deep charcoal `#2C2C2C`
-- **Headings:** Georgia serif
-- **Body text:** System UI sans-serif
-- **Accent:** Muted blue `#5B8CB0`
-- **Borders:** `#E5DDD0`
-- **Input backgrounds:** `#FDFBF7`
-- **Cards:** White/60 with thin borders, no heavy shadows
+- **Typography:** IBM Plex Mono (monospace) for headings, labels, buttons
+- **Accent blue:** `#4A90D9` (primary actions, category tags)
+- **Accent orange:** `#E8651A` (manual tags, warnings)
+- **Income green:** `#2D8B4E`
+- **Expense red:** `#C4533A`
+- **Borders:** 2px solid `#2C2C2C` on all cards and buttons
+- **Cards:** `#FDFAF4` background, rounded-xl, 2px border + bottom shadow for depth
+- **Buttons:** 3D tactile — thick border + `box-shadow: 0 3px 0 0 #2C2C2C`, active press compresses shadow
+- **Input backgrounds:** `#FDFAF4`
+- **No gradients, no glassmorphism, no soft shadows**
 
 ## Infrastructure
 
@@ -121,6 +134,13 @@ docker-compose.yml
 - **Category API functional:**
   - `GET /api/categories` — returns all categories (system + custom)
   - `POST /api/categories` — creates custom category (name required, no duplicates, is_system=false)
+- **Transaction CRUD functional:**
+  - `GET /api/transactions?year=&month=` — returns transactions for that month, sorted by date descending
+  - `POST /api/transactions` — creates manual transaction (amount must be positive, merchantName defaults to "手动添加")
+  - `PUT /api/transactions/{id}` — edits amount/category/note/isIncome; sets categoryModifiedByUser=true when category changes
+  - `DELETE /api/transactions/{id}` — deletes manual transactions only; returns 403 for CSV-imported records
+  - Amount validation: rejects zero or negative amounts with 400 + `{"error": "金额必须为正数"}`
+  - GlobalExceptionHandler ensures all ResponseStatusExceptions return `{"error": "message"}` format
 - **CSV import functional:**
   - `POST /api/transactions/import` — accepts multipart CSV, parses BOA format via Apache Commons CSV
   - Auto-categorization by Payee keyword matching (8 category mappings + fallback to 其他)
@@ -132,3 +152,11 @@ docker-compose.yml
   - `categories` table with 9 system presets seeded on first startup
   - `transactions` table with FK to categories, unique constraint on source_hash
   - DataInitializer ensures no duplicate seeding on restart
+- **Frontend transaction list and CRUD functional:**
+  - TransactionList component with month selector (prev/next arrows), date-desc order
+  - Each card shows: merchant name, date, category tag, note, colored amount (green=income, red=expense)
+  - Manual transactions marked with orange "MANUAL" tag
+  - TransactionModal for add/edit: amount, date, category dropdown, note, income/expense toggle
+  - Delete button (manual only) with confirmation dialog
+  - "+ Add Transaction" and "Import CSV" action buttons in HomePage
+  - All styled with Brutalist/Tactile UI (thick borders, 3D buttons, monospace typography)

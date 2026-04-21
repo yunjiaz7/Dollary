@@ -782,3 +782,374 @@ HTTP 401
 | 前端错误提示 | 红色错误框 | |
 
 全部通过即 Phase 5 验证完成。请告诉我每项的实际结果。
+
+---
+
+# Phase 6 验证指南
+
+## 前置条件
+
+Phase 5 已全部通过。数据库中已有 Phase 5 导入的交易记录（4 月份数据）。确保 PostgreSQL 容器在运行。
+
+---
+
+## 第一步：启动后端（Terminal 2）
+
+```bash
+cd ~/Desktop/seekJOB/proj/Dollary/backend
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+./mvnw spring-boot:run
+```
+
+**等待启动完成**（看到 `Started BillingbookApplication`）。
+
+---
+
+## 第二步：启动前端（Terminal 3）
+
+```bash
+cd ~/Desktop/seekJOB/proj/Dollary/frontend
+npm run dev
+```
+
+**等待看到** `Local: http://localhost:5173/`
+
+---
+
+## 第三步：后端 API 测试 — 交易列表（curl）
+
+### 3.1 登录
+
+```bash
+curl -s -c /tmp/cookies.txt -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+```
+
+**预期：**
+```json
+{"message":"登录成功"}
+```
+
+### 3.2 查询有数据的月份
+
+```bash
+curl -s -b /tmp/cookies.txt "http://localhost:8080/api/transactions?year=2026&month=4" | python3 -m json.tool | head -25
+```
+
+**预期：** 返回 JSON 数组，每个对象包含 `id`、`amount`、`date`、`merchantName`、`categoryName`、`categoryId`、`note`、`isIncome`、`isManual`。记录按日期倒序排列（最新的在前）。
+
+### 3.3 查询无数据的月份
+
+```bash
+curl -s -b /tmp/cookies.txt "http://localhost:8080/api/transactions?year=2025&month=1"
+```
+
+**预期：**
+```json
+[]
+```
+
+### 3.4 未登录访问（应返回 401）
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/transactions?year=2026&month=4"
+```
+
+**预期：** `401`
+
+---
+
+## 第四步：后端 API 测试 — 手动添加交易（curl）
+
+### 4.1 获取分类 ID
+
+```bash
+curl -s -b /tmp/cookies.txt http://localhost:8080/api/categories | python3 -c "import sys,json; cats=json.load(sys.stdin); print([c['id'] for c in cats if c['name']=='餐饮'][0])"
+```
+
+记下输出的 UUID，下面用 `<CATEGORY_ID>` 代替。
+
+### 4.2 创建手动支出
+
+```bash
+curl -s -b /tmp/cookies.txt -X POST http://localhost:8080/api/transactions \
+  -H "Content-Type: application/json" \
+  -d "{\"amount\":25.50,\"date\":\"2026-04-15\",\"categoryId\":\"<CATEGORY_ID>\",\"note\":\"午餐\",\"isIncome\":false}" | python3 -m json.tool
+```
+
+**预期：** 返回 200，JSON 中：
+- `isManual` = `true`
+- `merchantName` = `"手动添加"`
+- `isIncome` = `false`
+- `amount` = `25.50`
+
+记下返回的 `id`，下面用 `<MANUAL_TX_ID>` 代替。
+
+### 4.3 创建手动收入
+
+```bash
+curl -s -b /tmp/cookies.txt -X POST http://localhost:8080/api/transactions \
+  -H "Content-Type: application/json" \
+  -d "{\"amount\":100.00,\"date\":\"2026-04-20\",\"categoryId\":\"<CATEGORY_ID>\",\"note\":\"朋友还款\",\"isIncome\":true}" | python3 -m json.tool
+```
+
+**预期：** `isIncome` = `true`，`isManual` = `true`，`amount` = `100.00`。
+
+记下返回的 `id`，下面用 `<MANUAL_TX_ID2>` 代替。
+
+### 4.4 金额为零（应返回 400）
+
+```bash
+curl -s -w "\nHTTP %{http_code}\n" -b /tmp/cookies.txt -X POST http://localhost:8080/api/transactions \
+  -H "Content-Type: application/json" \
+  -d "{\"amount\":0,\"date\":\"2026-04-15\",\"categoryId\":\"<CATEGORY_ID>\",\"isIncome\":false}"
+```
+
+**预期：**
+```json
+{"error":"金额必须为正数"}
+HTTP 400
+```
+
+### 4.5 金额为负（应返回 400）
+
+```bash
+curl -s -w "\nHTTP %{http_code}\n" -b /tmp/cookies.txt -X POST http://localhost:8080/api/transactions \
+  -H "Content-Type: application/json" \
+  -d "{\"amount\":-10,\"date\":\"2026-04-15\",\"categoryId\":\"<CATEGORY_ID>\",\"isIncome\":false}"
+```
+
+**预期：**
+```json
+{"error":"金额必须为正数"}
+HTTP 400
+```
+
+---
+
+## 第五步：后端 API 测试 — 编辑交易（curl）
+
+### 5.1 编辑金额和备注
+
+```bash
+curl -s -b /tmp/cookies.txt -X PUT "http://localhost:8080/api/transactions/<MANUAL_TX_ID>" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":15.00,"note":"edited note"}' | python3 -m json.tool
+```
+
+**预期：** `amount` = `15.00`，`note` = `"edited note"`，其他字段不变。
+
+### 5.2 编辑分类（应触发 category_modified_by_user = true）
+
+```bash
+# 先获取另一个分类 ID
+SHOPPING_ID=$(curl -s -b /tmp/cookies.txt http://localhost:8080/api/categories | python3 -c "import sys,json; cats=json.load(sys.stdin); print([c['id'] for c in cats if c['name']=='购物'][0])")
+
+curl -s -b /tmp/cookies.txt -X PUT "http://localhost:8080/api/transactions/<MANUAL_TX_ID>" \
+  -H "Content-Type: application/json" \
+  -d "{\"categoryId\":\"$SHOPPING_ID\"}" | python3 -m json.tool
+```
+
+**预期：** `categoryName` 变为 `"购物"`。
+
+验证数据库：
+```bash
+docker exec billingbook-db psql -U billingbook -d billingbook -c \
+  "SELECT category_modified_by_user FROM transactions WHERE id = '<MANUAL_TX_ID>';"
+```
+
+**预期：** `category_modified_by_user` = `t`。
+
+### 5.3 编辑不存在的交易（应返回 404）
+
+```bash
+curl -s -w "\nHTTP %{http_code}\n" -b /tmp/cookies.txt -X PUT "http://localhost:8080/api/transactions/00000000-0000-0000-0000-000000000000" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":10}'
+```
+
+**预期：**
+```json
+{"error":"交易记录不存在"}
+HTTP 404
+```
+
+---
+
+## 第六步：后端 API 测试 — 删除交易（curl）
+
+### 6.1 删除手动交易（应成功 200）
+
+```bash
+curl -s -o /dev/null -w "HTTP %{http_code}" -b /tmp/cookies.txt -X DELETE "http://localhost:8080/api/transactions/<MANUAL_TX_ID2>"
+```
+
+**预期：** `HTTP 200`
+
+### 6.2 删除 CSV 导入的交易（应返回 403）
+
+获取一条 CSV 导入记录的 ID：
+```bash
+CSV_TX_ID=$(curl -s -b /tmp/cookies.txt "http://localhost:8080/api/transactions?year=2026&month=4" | python3 -c "import sys,json; data=json.load(sys.stdin); print([t['id'] for t in data if not t['isManual']][0])")
+
+curl -s -w "\nHTTP %{http_code}\n" -b /tmp/cookies.txt -X DELETE "http://localhost:8080/api/transactions/$CSV_TX_ID"
+```
+
+**预期：**
+```json
+{"error":"CSV导入的记录不可删除"}
+HTTP 403
+```
+
+---
+
+## 第七步：前端测试 — 交易列表显示（浏览器）
+
+1. 打开浏览器，访问 `http://localhost:5173`
+2. 用 `admin` / `admin123` 登录
+3. **预期：** 主页显示交易列表（不再是 Phase 5 的空状态提示）
+4. 列表顶部有月份选择器，显示当前月份格式如 `Apr 2026`
+5. 点击 `←` 切换到上个月，点击 `→` 切换到下个月
+6. **预期：** 切换到无数据月份时，列表区域显示 "No transactions this month." 空状态卡片
+7. 切换回 2026 年 4 月，验证每条交易卡片显示：
+   - 商家名称（粗体，左侧）
+   - 日期、分类标签（蓝色小标签）、备注
+   - 金额（右侧）：收入绿色 `+$XX.XX`，支出红色 `-$XX.XX`
+8. 之前通过 curl 手动添加的记录（merchantName 为 "手动添加"）有橙色 `MANUAL` 标签
+
+---
+
+## 第八步：前端测试 — 添加交易（浏览器）
+
+1. 点击主页上方蓝色 `+ Add Transaction` 按钮
+2. **预期：** 弹出 Modal，标题 "ADD TRANSACTION"
+3. 填写：
+   - Amount: `42.50`
+   - Date: 默认今天（可修改，日期选择器）
+   - Category: 下拉选择一个分类
+   - Note: `test manual add`
+   - Type: 底部有 Expense / Income 切换按钮，选择 "Expense"（红色高亮）
+4. 点击 "Save" 按钮
+5. **预期：** Modal 关闭，列表刷新，新记录出现，带 `MANUAL` 标签，金额显示红色 `-$42.50`
+
+---
+
+## 第九步：前端测试 — 编辑交易（浏览器）
+
+1. 点击列表中任意一条记录
+2. **预期：** 弹出编辑 Modal，标题 "EDIT TRANSACTION"
+3. 表单预填充当前值（编辑模式下不显示 Date 字段）
+4. 修改 Amount 为 `10.00`，修改 Note 为 `edited`
+5. 切换 Category 为其他分类
+6. 点击 "Save"
+7. **预期：** Modal 关闭，列表中该记录的金额、备注、分类标签已更新
+
+---
+
+## 第十步：前端测试 — 删除交易（浏览器）
+
+### 10.1 删除手动添加的记录
+
+1. 点击一条有 `MANUAL` 标签的记录
+2. **预期：** Modal 底部有红色 "Delete Transaction" 按钮
+3. 点击 "Delete Transaction"
+4. **预期：** 弹出浏览器确认对话框 `Delete this transaction?`
+5. 点击 "确定"（OK）
+6. **预期：** Modal 关闭，记录从列表消失
+
+### 10.2 CSV 导入的记录无删除按钮
+
+1. 点击一条没有 `MANUAL` 标签的 CSV 导入记录
+2. **预期：** Modal 底部 **没有** "Delete Transaction" 按钮
+
+---
+
+## 第十一步：前端测试 — UI 样式验证
+
+### 11.1 背景
+
+- 页面背景为暖灰色 `#E8E4DC`（不是纯白）
+
+### 11.2 卡片和边框
+
+- 所有交易卡片有 2px 实线深色边框
+- 卡片有底部阴影（非 hover 时可见），点击时阴影压缩模拟按压
+
+### 11.3 按钮 3D 效果
+
+- 所有按钮有 2px 实线边框 + 底部阴影（约 3px）
+- 按下时按钮下沉（`translate-y`）+ 阴影消失
+- `+ Add Transaction` 蓝色背景 `#4A90D9`
+- `Import CSV` 浅色背景 `#FDFAF4`
+
+### 11.4 字体
+
+- 打开 DevTools → Elements → 检查按钮或标题的 computed `font-family`
+- **预期：** 包含 `IBM Plex Mono`
+
+### 11.5 颜色
+
+- 收入金额绿色
+- 支出金额红色
+- `MANUAL` 标签橙色
+- 分类标签蓝色背景 + 蓝色文字
+
+### 11.6 Modal
+
+- Modal 有 2px 深色边框，背景 `#E8E4DC`
+- Expense/Income 切换为分体按钮：Expense 红色高亮，Income 绿色高亮
+- Cancel 按钮浅色，Save 按钮蓝色
+- Delete 按钮（仅手动记录可见）红色边框 + 红色文字
+
+### 11.7 浏览器 Console
+
+- 按 F12 → Console，确认无红色错误
+
+---
+
+## 第十二步：前端测试 — CSV 导入仍然正常
+
+1. 点击 `Import CSV` 按钮，上传之前用过的 `/tmp/test_boa.csv`
+2. **预期：** 显示绿色结果横幅，内容为 "Imported: 0, Skipped (dup): 5, Skipped (pending): 1"（因为数据已存在）
+3. 横幅有关闭按钮 `✕`，点击后横幅消失
+4. 列表不受影响（无新记录）
+
+---
+
+## 验证结果汇总
+
+| 检查项 | 预期结果 | 实际结果 |
+|--------|---------|---------|
+| GET /api/transactions（有数据） | 返回数组，按日期倒序 | |
+| GET /api/transactions（无数据） | 返回空数组 `[]` | |
+| GET /api/transactions（未登录） | 401 | |
+| POST /api/transactions（支出） | 200，isManual=true，merchantName="手动添加" | |
+| POST /api/transactions（收入） | 200，isIncome=true，amount=正数 | |
+| POST /api/transactions（金额=0） | 400 `"金额必须为正数"` | |
+| POST /api/transactions（金额<0） | 400 `"金额必须为正数"` | |
+| PUT /api/transactions（编辑金额/备注） | 字段更新，返回最新值 | |
+| PUT /api/transactions（改分类） | categoryName 更新，DB 中 category_modified_by_user=true | |
+| PUT /api/transactions（不存在 ID） | 404 `"交易记录不存在"` | |
+| DELETE /api/transactions（手动） | 200 成功 | |
+| DELETE /api/transactions（CSV 导入） | 403 `"CSV导入的记录不可删除"` | |
+| 前端：交易列表显示 | 卡片列表，日期倒序 | |
+| 前端：月份选择器 | `←` `→` 箭头切换，标题更新 | |
+| 前端：空月份 | 显示 "No transactions this month." | |
+| 前端：收支颜色区分 | 收入绿色 `+$`，支出红色 `-$` | |
+| 前端：MANUAL 标签 | 手动记录有橙色标签 | |
+| 前端：分类标签 | 蓝色背景小标签显示分类名 | |
+| 前端：添加交易 | Modal 弹出，保存后记录出现在列表 | |
+| 前端：编辑交易 | Modal 预填值（无 Date 字段），保存后列表更新 | |
+| 前端：删除手动记录 | 有 Delete 按钮，确认后记录消失 | |
+| 前端：CSV 记录无 Delete | 编辑 Modal 无 Delete 按钮 | |
+| UI：背景色 #E8E4DC | 暖灰色，非纯白 | |
+| UI：卡片 2px 边框 + 阴影 | 深色边框，底部阴影，点击压缩 | |
+| UI：按钮 3D 效果 | 边框 + 底部阴影，按下压缩 | |
+| UI：IBM Plex Mono 字体 | 标题/标签/按钮为等宽字体 | |
+| UI：Modal 收入/支出切换 | 红绿分体按钮 | |
+| UI：Console 无错误 | 无红色错误 | |
+| 前端：CSV 导入仍正常 | 上传后显示结果横幅，可关闭 | |
+
+全部通过即 Phase 6 验证完成。请告诉我每项的实际结果。

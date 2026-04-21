@@ -39,10 +39,10 @@
 
 | Step | Description | Status |
 |------|-------------|--------|
-| Step 11 | 交易列表 API | Not started |
-| Step 12 | 手动添加 / 编辑 / 删除交易 API | Not started |
-| Step 13 | 前端交易列表页 | Not started |
-| Step 14 | 前端编辑 / 添加 / 删除交互 | Not started |
+| Step 11 | 交易列表 API (GET /api/transactions?year=&month=, date-desc order, TransactionResponse DTO) | Done |
+| Step 12 | 手动添加 / 编辑 / 删除交易 API (POST/PUT/DELETE, amount validation, CSV delete restriction, category_modified_by_user flag) | Done |
+| Step 13 | 前端交易列表页 (TransactionList component, month selector, income/expense color, manual tag, Brutalist UI) | Done |
+| Step 14 | 前端编辑 / 添加 / 删除交互 (TransactionModal component, category dropdown, income/expense toggle, delete with confirm) | Done |
 
 ## Phase 7: 统计与图表
 
