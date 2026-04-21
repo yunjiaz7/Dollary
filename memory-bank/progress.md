@@ -48,9 +48,9 @@
 
 | Step | Description | Status |
 |------|-------------|--------|
-| Step 15 | 收支总览 API | Not started |
-| Step 16 | 分类统计 API | Not started |
-| Step 17 | 前端收支总览与图表 | Not started |
+| Step 15 | 收支总览 API (GET /api/summary — totalIncome, totalExpense, balance) | Done |
+| Step 16 | 分类统计 API (GET /api/summary/categories — expenses by category, sorted desc) | Done |
+| Step 17 | 前端收支总览与图表 (SummaryCards 3-col grid, Charts with pie/bar tabs via Recharts, useSummary hook, empty states) | Done |
 
 ## Phase 8: 收尾
 

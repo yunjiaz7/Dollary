@@ -2,12 +2,16 @@ import { useState, useRef } from 'react';
 import api from '../utils/api';
 import useTransactions from '../hooks/useTransactions';
 import useCategories from '../hooks/useCategories';
+import useSummary from '../hooks/useSummary';
 import TransactionList from '../components/TransactionList';
 import TransactionModal from '../components/TransactionModal';
+import SummaryCards from '../components/SummaryCards';
+import Charts from '../components/Charts';
 
 export default function HomePage({ onLogout }) {
   const { transactions, loading, currentMonth, goToPrevMonth, goToNextMonth, refresh } = useTransactions();
   const categories = useCategories();
+  const { summary, categorySummary, loading: summaryLoading, refresh: refreshSummary } = useSummary(currentMonth);
 
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -37,6 +41,7 @@ export default function HomePage({ onLogout }) {
       });
       setImportResult(res.data);
       refresh();
+      refreshSummary();
     } catch (err) {
       const msg = err.response?.data?.error || 'Import failed';
       setImportError(msg);
@@ -142,6 +147,12 @@ export default function HomePage({ onLogout }) {
           </div>
         )}
 
+        {/* Summary Cards */}
+        <SummaryCards summary={summary} loading={summaryLoading} />
+
+        {/* Charts */}
+        <Charts categorySummary={categorySummary} />
+
         {/* Transaction List */}
         <TransactionList
           transactions={transactions}
@@ -159,8 +170,8 @@ export default function HomePage({ onLogout }) {
           transaction={modal === 'add' ? null : modal}
           categories={categories}
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); refresh(); }}
-          onDeleted={() => { setModal(null); refresh(); }}
+          onSaved={() => { setModal(null); refresh(); refreshSummary(); }}
+          onDeleted={() => { setModal(null); refresh(); refreshSummary(); }}
         />
       )}
     </div>

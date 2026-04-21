@@ -17,8 +17,11 @@ com.billingbook
 │   ├── HealthController.java      — GET /api/health returns "ok"
 │   ├── AuthController.java        — POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
 │   ├── CategoryController.java    — GET /api/categories, POST /api/categories
-│   └── TransactionController.java — GET/POST/PUT/DELETE /api/transactions + POST /api/transactions/import
+│   ├── TransactionController.java — GET/POST/PUT/DELETE /api/transactions + POST /api/transactions/import
+│   └── SummaryController.java    — GET /api/summary, GET /api/summary/categories
 │   ├── TransactionResponse.java     — Record: id, amount, date, merchantName, categoryName, categoryId, note, isIncome, isManual
+│   ├── SummaryResponse.java        — Record: totalIncome, totalExpense, balance
+│   ├── CategorySummaryResponse.java — Record: categoryName, totalAmount
 │   ├── TransactionCreateRequest.java — Record: amount, date, categoryId, note, isIncome
 │   └── TransactionUpdateRequest.java — Record: amount, categoryId, note, isIncome (all nullable)
 ├── model/
@@ -26,10 +29,11 @@ com.billingbook
 │   └── Transaction.java           — JPA entity: id, amount, date, merchant_name, category (FK), note, is_income, is_manual, category_modified_by_user, source_hash (unique), created_at, updated_at; table: transactions
 ├── repository/
 │   ├── CategoryRepository.java    — Spring Data JPA; existsBySystemTrue(), existsByName()
-│   └── TransactionRepository.java — Spring Data JPA; existsBySourceHash(), findByDateBetweenOrderByDateDesc()
+│   └── TransactionRepository.java — Spring Data JPA; existsBySourceHash(), findByDateBetweenOrderByDateDesc(), sumIncomeByDateBetween(), sumExpenseByDateBetween(), sumExpenseByCategoryBetween()
 └── service/
     ├── CsvImportService.java      — Parses BOA CSV, auto-categorizes by keyword, de-duplicates by source_hash, skips pending
-    └── TransactionService.java   — CRUD for transactions: list by month, create (manual), update (sets categoryModifiedByUser), delete (manual only)
+    ├── TransactionService.java   — CRUD for transactions: list by month, create (manual), update (sets categoryModifiedByUser), delete (manual only)
+    └── SummaryService.java       — Monthly totals (income/expense/balance), category spending breakdown
 ```
 
 ### Authentication
@@ -80,10 +84,13 @@ src/
 │   └── HomePage.jsx               — Main page: header, transaction list, add/import buttons, CSV import, modals
 ├── components/
 │   ├── TransactionList.jsx        — Month selector + scrollable transaction cards (Brutalist style)
-│   └── TransactionModal.jsx       — Add/edit modal: amount, category dropdown, note, income/expense toggle, delete
+│   ├── TransactionModal.jsx       — Add/edit modal: amount, category dropdown, note, income/expense toggle, delete
+│   ├── SummaryCards.jsx           — 3-col grid: income, expense, balance cards with color coding
+│   └── Charts.jsx                 — Pie/Bar chart tabs via Recharts, category spending breakdown, empty state
 ├── hooks/
 │   ├── useTransactions.js         — Fetches transactions by month, month navigation, refresh
-│   └── useCategories.js           — Fetches category list
+│   ├── useCategories.js           — Fetches category list
+│   └── useSummary.js              — Fetches summary + category summary by month, auto-refreshes on month change
 ├── App.jsx                        — React Router: / → HomePage, /login → LoginPage, auth guard
 ├── index.css                      — Tailwind CSS + IBM Plex Mono font import
 └── main.jsx                       — Entry point
@@ -160,3 +167,11 @@ docker-compose.yml
   - Delete button (manual only) with confirmation dialog
   - "+ Add Transaction" and "Import CSV" action buttons in HomePage
   - All styled with Brutalist/Tactile UI (thick borders, 3D buttons, monospace typography)
+- **Summary and charts functional:**
+  - `GET /api/summary?year=&month=` — returns totalIncome, totalExpense, balance (2 decimal precision)
+  - `GET /api/summary/categories?year=&month=` — returns expenses by category sorted by amount desc
+  - SummaryCards component: 3-col grid showing income (green), expense (red), balance (green/red)
+  - Charts component: tabbed pie/bar chart using Recharts, with category colors and tooltips
+  - useSummary hook: fetches both APIs in parallel, refreshes on month change
+  - Empty state text shown when no expense data (no empty charts)
+  - Summary refreshes on add/edit/delete/import actions

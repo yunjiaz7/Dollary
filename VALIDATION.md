@@ -1153,3 +1153,289 @@ HTTP 403
 | 前端：CSV 导入仍正常 | 上传后显示结果横幅，可关闭 | |
 
 全部通过即 Phase 6 验证完成。请告诉我每项的实际结果。
+
+---
+
+# Phase 7 验证指南
+
+## 前置条件
+
+Phase 6 已全部通过。数据库中已有交易记录。确保 PostgreSQL 容器在运行。
+
+---
+
+## 第一步：启动后端（Terminal 2）
+
+```bash
+cd ~/Desktop/seekJOB/proj/Dollary/backend
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+./mvnw spring-boot:run
+```
+
+**等待启动完成**（看到 `Started BillingbookApplication`）。
+
+---
+
+## 第二步：启动前端（Terminal 3）
+
+```bash
+cd ~/Desktop/seekJOB/proj/Dollary/frontend
+npm run dev
+```
+
+**等待看到** `Local: http://localhost:5173/`
+
+---
+
+## 第三步：后端 API 测试 — Summary API（curl）
+
+### 3.1 登录
+
+```bash
+curl -s -c /tmp/cookies.txt -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+```
+
+**预期：**
+```json
+{"message":"登录成功"}
+```
+
+### 3.2 查询有数据月份的 Summary
+
+```bash
+curl -s -b /tmp/cookies.txt "http://localhost:8080/api/summary?year=2026&month=4" | python3 -m json.tool
+```
+
+**预期：** 返回 JSON 对象：
+```json
+{
+    "totalIncome": <number>,
+    "totalExpense": <number>,
+    "balance": <number>
+}
+```
+
+验证：
+- `totalIncome` > 0（4 月有收入数据）
+- `totalExpense` > 0（4 月有支出数据）
+- `balance` = `totalIncome` - `totalExpense`
+- 所有数字精确到小数点后两位
+
+### 3.3 手动验证 balance 计算正确
+
+```bash
+echo "验证: balance = totalIncome - totalExpense"
+curl -s -b /tmp/cookies.txt "http://localhost:8080/api/summary?year=2026&month=4" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(f'Income:  {d[\"totalIncome\"]}')
+print(f'Expense: {d[\"totalExpense\"]}')
+print(f'Balance: {d[\"balance\"]}')
+expected = round(d['totalIncome'] - d['totalExpense'], 2)
+print(f'Expected balance: {expected}')
+print(f'Match: {d[\"balance\"] == expected}')
+"
+```
+
+**预期：** `Match: True`
+
+### 3.4 查询空月份
+
+```bash
+curl -s -b /tmp/cookies.txt "http://localhost:8080/api/summary?year=2020&month=1"
+```
+
+**预期：**
+```json
+{"totalIncome":0,"totalExpense":0,"balance":0}
+```
+
+### 3.5 未登录访问（应返回 401）
+
+```bash
+curl -s "http://localhost:8080/api/summary?year=2026&month=4"
+```
+
+**预期：**
+```json
+{"error":"未登录"}
+```
+
+---
+
+## 第四步：后端 API 测试 — Category Summary API（curl）
+
+### 4.1 查询有数据月份的分类统计
+
+```bash
+curl -s -b /tmp/cookies.txt "http://localhost:8080/api/summary/categories?year=2026&month=4" | python3 -m json.tool
+```
+
+**预期：** 返回 JSON 数组，每个对象 `{ categoryName, totalAmount }`：
+- 按金额降序排列
+- 不包含收入分类（只有支出）
+- 无消费的分类不出现
+
+### 4.2 验证分类总和等于 totalExpense
+
+```bash
+curl -s -b /tmp/cookies.txt "http://localhost:8080/api/summary/categories?year=2026&month=4" | python3 -c "
+import sys, json
+cats = json.load(sys.stdin)
+total = sum(c['totalAmount'] for c in cats)
+print(f'Category sum: {total}')
+for c in cats:
+    print(f'  {c[\"categoryName\"]}: {c[\"totalAmount\"]}')
+"
+```
+
+然后对比 Step 3.2 的 `totalExpense`，两者应该相等。
+
+### 4.3 查询空月份
+
+```bash
+curl -s -b /tmp/cookies.txt "http://localhost:8080/api/summary/categories?year=2020&month=1"
+```
+
+**预期：**
+```json
+[]
+```
+
+### 4.4 未登录访问
+
+```bash
+curl -s "http://localhost:8080/api/summary/categories?year=2026&month=4"
+```
+
+**预期：**
+```json
+{"error":"未登录"}
+```
+
+---
+
+## 第五步：前端测试 — Summary Cards（浏览器）
+
+1. 打开浏览器，访问 `http://localhost:5173`
+2. 用 `admin` / `admin123` 登录
+3. **预期：** 交易列表上方出现三张并排卡片
+4. 三张卡片分别显示：
+   - **Income**（绿色数字，格式 `+$XX.XX`）
+   - **Expense**（红色数字，格式 `-$XX.XX`）
+   - **Balance**（正数绿色 `+$XX.XX`，负数红色 `-$XX.XX`）
+5. 卡片有 Brutalist 风格：2px 深色边框、圆角、底部阴影
+6. 标签文字为 IBM Plex Mono 等宽字体
+
+---
+
+## 第六步：前端测试 — Charts（浏览器）
+
+1. 在 Summary Cards 下方，**预期：** 出现图表区域
+2. 图表区域有两个 Tab 按钮："Pie Chart" 和 "Bar Chart"
+3. 默认显示饼图（Pie Chart）：
+   - 环形饼图，各分类用不同颜色显示
+   - 鼠标悬停显示 tooltip（金额）
+   - 标签显示分类名和百分比
+4. 点击 "Bar Chart" tab：
+   - 切换为水平柱状图
+   - Y 轴为分类名，X 轴为金额
+   - 每个柱子有不同颜色
+   - 鼠标悬停显示 tooltip
+5. 点击 "Pie Chart" tab 可切换回饼图
+
+---
+
+## 第七步：前端测试 — 月份切换同步
+
+1. 点击月份选择器的 `←` 切换到上个月（无数据月份）
+2. **预期：**
+   - Summary Cards 显示 Income `$0.00`, Expense `$0.00`, Balance `$0.00`
+   - 图表区域显示文字 "No expense data to chart this month."（不显示空图表）
+   - 交易列表显示 "No transactions this month."
+3. 切换回有数据的月份
+4. **预期：** Summary Cards、Charts、Transaction List 全部恢复显示
+
+---
+
+## 第八步：前端测试 — 操作后 Summary 刷新
+
+### 8.1 添加交易后刷新
+
+1. 点击 `+ Add Transaction`，添加一笔支出（如 $50）
+2. **预期：** Summary Cards 的 Expense 增加 $50，Balance 减少 $50
+3. **预期：** Charts 中对应分类的金额增加
+
+### 8.2 编辑交易后刷新
+
+1. 点击刚添加的交易，编辑金额为 $30
+2. **预期：** Summary Cards 和 Charts 实时更新
+
+### 8.3 删除交易后刷新
+
+1. 点击一条手动添加的交易，点击 Delete
+2. **预期：** Summary Cards 和 Charts 实时更新
+
+### 8.4 CSV 导入后刷新
+
+1. 点击 `Import CSV`，上传 CSV 文件
+2. **预期：** Summary Cards 和 Charts 实时更新
+
+---
+
+## 第九步：前端测试 — UI 样式验证
+
+### 9.1 Summary Cards 样式
+
+- 三张卡片等宽并排（grid-cols-3）
+- 每张卡片有 2px 深色边框 `#2C2C2C`，圆角 `rounded-xl`
+- 背景 `#FDFAF4`，底部阴影
+- 标签文字 10px 大写，颜色 `#8B8680`
+- 数字使用 IBM Plex Mono 字体
+
+### 9.2 Charts 样式
+
+- 图表容器有 2px 深色边框，圆角，底部阴影
+- Tab 按钮有 3D 效果（边框 + 底部阴影）
+- 选中 tab 深色背景，未选中浅色背景
+- Tooltip 有深色边框和暖色背景
+- 空状态文字居中，使用等宽字体
+
+### 9.3 浏览器 Console
+
+- 按 F12 → Console，确认无红色错误
+
+---
+
+## 验证结果汇总
+
+| 检查项 | 预期结果 | 实际结果 |
+|--------|---------|---------|
+| GET /api/summary（有数据） | totalIncome, totalExpense, balance（2位小数） | |
+| balance 计算正确 | balance = income - expense | |
+| GET /api/summary（空月份） | 全部为 0 | |
+| GET /api/summary（未登录） | 401 | |
+| GET /api/summary/categories（有数据） | 按金额降序的分类数组 | |
+| 分类总和 = totalExpense | 两者相等 | |
+| GET /api/summary/categories（空月份） | `[]` | |
+| GET /api/summary/categories（未登录） | 401 | |
+| 前端：Summary Cards 显示 | Income/Expense/Balance 三张卡片 | |
+| 前端：Income 绿色，Expense 红色 | 颜色正确 | |
+| 前端：Balance 正绿负红 | 颜色随正负变化 | |
+| 前端：Pie Chart 显示 | 环形图，分类标签+百分比 | |
+| 前端：Bar Chart 显示 | 水平柱状图，分类名+金额 | |
+| 前端：Tab 切换 | Pie/Bar 图表切换正常 | |
+| 前端：空月份 | 显示 "No expense data" 文字 | |
+| 前端：月份切换同步 | Cards + Charts + List 同步更新 | |
+| 前端：添加后刷新 | Summary 和 Charts 更新 | |
+| 前端：编辑后刷新 | Summary 和 Charts 更新 | |
+| 前端：删除后刷新 | Summary 和 Charts 更新 | |
+| 前端：导入后刷新 | Summary 和 Charts 更新 | |
+| UI：Cards Brutalist 样式 | 2px 边框，阴影，等宽字体 | |
+| UI：Charts Brutalist 样式 | 边框，3D tab 按钮，等宽 tooltip | |
+| UI：Console 无错误 | 无红色错误 | |
+
+全部通过即 Phase 7 验证完成。请告诉我每项的实际结果。
