@@ -13,9 +13,11 @@ function AppRoutes() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) { setAuthed(false); return; }
     api.get('/api/auth/me')
       .then(() => setAuthed(true))
-      .catch(() => setAuthed(false));
+      .catch(() => { localStorage.removeItem('token'); setAuthed(false); });
   }, []);
 
   const handleLogin = () => {
@@ -24,12 +26,9 @@ function AppRoutes() {
   };
 
   const handleLogout = async () => {
-    try {
-      await api.post('/api/auth/logout');
-    } finally {
-      setAuthed(false);
-      navigate('/login', { replace: true });
-    }
+    localStorage.removeItem('token');
+    setAuthed(false);
+    navigate('/login', { replace: true });
   };
 
   if (authed === null) {

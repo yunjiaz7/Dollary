@@ -13,7 +13,8 @@ export default function LoginPage({ onLogin }) {
     setLoading(true);
 
     try {
-      await api.post('/api/auth/login', { username, password });
+      const res = await api.post('/api/auth/login', { username, password });
+      localStorage.setItem('token', res.data.token);
       onLogin();
     } catch (err) {
       if (err.response?.status === 401) {
